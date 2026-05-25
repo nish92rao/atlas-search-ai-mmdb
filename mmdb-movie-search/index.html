@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MongoDB Movie Database - MMDB</title>
+    <link rel="icon" href="logo.jpeg" type="image/png">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <div class="logo-img" style="cursor: pointer;" onclick="document.getElementById('resetBtn').click()">
+            <img src="logo.jpeg" alt="MMDB Logo" style="width: 100%; height: 100%;">
+        </div>
+        <div class="header-title">MongoDB Movie Database</div>
+    </header>
+
+    <div class="container">
+        <div class="search-section">
+            <!-- Search Input Row -->
+            <div class="search-input-wrapper">
+                <input 
+                    type="text" 
+                    id="searchInput" 
+                    class="search-box" 
+                    placeholder="Search movies..."
+                    autocomplete="off"
+                >
+                <!-- Optional: Uncomment to enable autocomplete suggestions -->
+                <div id="suggestionsList" class="suggestions-list" style="display: none;"></div>
+                
+                <button class="btn btn-primary" id="searchBtn">Search</button>
+                <button class="btn btn-secondary" id="resetBtn">Reset</button>
+            </div>
+
+            <!-- Search Options -->
+            <div class="search-options">
+                <div class="radio-group">
+                    <label>
+                        <input type="radio" name="searchType" value="exact" checked>
+                        Exact Match
+                    </label>
+                    <label>
+                        <input type="radio" name="searchType" value="fulltext">
+                        Full Text Search
+                    </label>
+                    <label id="vectorSearchLabel" style="display: none;">
+                        <input type="radio" name="searchType" value="vector">
+                        Vector Search
+                    </label>
+                    <label id="hybridSearchLabel" style="display: none;">
+                        <input type="radio" name="searchType" value="hybrid">
+                        Hybrid Search
+                    </label>
+                    <label id="aiModeLabel" style="display: none;">
+                        <input type="radio" name="searchType" value="ai">
+                        AI Mode
+                    </label>
+                </div>
+            </div>
+
+            <!-- Conditional Fields (Shown for Exact Match only) -->
+            <div class="conditional-fields" id="conditionalFields">
+                <div class="field-group">
+                    <label for="fieldSelect">Field:</label>
+                    <select id="fieldSelect">
+                        <option value="title">Title</option>
+                        <option value="cast">Cast</option>
+                        <option value="plot">Plot</option>
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label for="sortSelect">Sort By:</label>
+                    <select id="sortSelect">
+                        <option value="">None</option>
+                        <option value="year">Year</option>
+                        <option value="rating">Rating</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Conditional Fields (Shown for Hybrid Search only) -->
+            <div class="hybrid-conditional-fields" id="hybridConditionalFields" style="display: none;">
+                <div class="field-group">
+                    <label for="ftsWeightSlider">Weight:</label>
+                    <div class="hybrid-weight-control">
+                        <input
+                            type="range"
+                            id="ftsWeightSlider"
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            value="0.5"
+                        >
+                        <div class="hybrid-weight-labels hybrid-weight-legend">
+                            <span id="ftsWeightLabel">FTS: 0.50</span>
+                            <span id="vectorWeightLabel">Vector: 0.50</span>
+                        </div>
+                        <input type="hidden" id="ftsWeight" value="0.5">
+                        <input type="hidden" id="vectorWeight" value="0.5">
+                    </div>
+                </div>
+                <div class="field-group">
+                    <label for="hybridApproach">Approach:</label>
+                    <select id="hybridApproach">
+                        <!-- $rankFusion and $scoreFusion are available only on v8.3 and above. Uncomment the corresponding lines to use them. -->
+                        <option value="rrf">Reciprocal Rank Fusion (RRF)</option>
+                        <!-- <option value="rankFusion">$rankFusion</option> -->
+                        <option value="rsf">Relative Score Fusion (RSF)</option>
+                        <!-- <option value="scoreFusion">$scoreFusion</option> -->
+                    </select>
+                </div>
+            </div>
+
+            <!-- Conditional Fields (Shown for AI Mode only) -->
+            <div class="ai-conditional-fields" id="aiConditionalFields" style="display: none;">
+                <div class="field-group">
+                    <label for="aiMode">Mode:</label>
+                    <select id="aiMode">
+                        <option value="rag">RAG</option>
+                        <option value="agentic" id="agenticOption" style="display: none;">Agentic AI</option>
+                    </select>
+                </div>
+            </div>
+            <br>
+
+            <!-- View Toggle -->
+            <div class="view-toggle" id="viewToggle">
+                <button class="view-btn active" id="listViewBtn" title="List View">☰</button>
+                <button class="view-btn" id="tileViewBtn" title="Tile View">⊞</button>
+            </div>
+        </div>
+
+        <!-- Facets Section -->
+        <div class="facets-section" id="facetsSection" style="display: none;">
+            <div class="facets-container">
+                <div class="facet-column">
+                    <h3 class="facet-title">Genres</h3>
+                    <div id="genresFacet" class="facet-content"></div>
+                </div>
+                <div class="facet-column">
+                    <h3 class="facet-title">Ratings</h3>
+                    <div id="ratingsFacet" class="facet-content"></div>
+                </div>
+                <div class="facet-column">
+                    <h3 class="facet-title">Release Dates</h3>
+                    <div id="releaseDatesFacet" class="facet-content"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="results-section" id="resultsSection">
+            <div class="empty-state">
+                <p>Enter a search query to get started</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal" id="modal">
+            <button class="modal-close" id="modalClose">&times;</button>
+            <div class="modal-content" id="modalContent"></div>
+        </div>
+    </div>
+
+    <!-- RAG Chat Modal -->
+    <div class="chat-modal-overlay" id="discoverModalOverlay">
+        <div class="chat-modal" id="discoverModal">
+            <button class="chat-modal-close" id="discoverModalClose">&times;</button>
+            <div class="chat-modal-header">Discover Results</div>
+            <div class="chat-messages" id="discoverMessages"></div>
+            <div class="chat-input-row">
+                <input
+                    type="text"
+                    id="discoverInput"
+                    class="chat-input"
+                    placeholder="Ask about these results..."
+                    autocomplete="off"
+                >
+                <button class="btn btn-primary" id="discoverAskBtn">Ask</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const CONFIG = {
+            apiBaseUrl: 'http://localhost:3000',
+            autocompleteEnabled: false,
+            facetsEnabled: false,
+            vectorSearchEnabled: false,
+            ragEnabled: false,
+            agenticEnabled: false
+        };
+
+        // State
+        let currentResults = [];
+        let currentPage = 1;
+        const resultsPerPage = 16;
+        let isListView = true;
+        let suggestionTimeout;
+        let discoverMessagesState = [];
+        let aiChatMessages = [];
+        let configReadyPromise = null;
+
+        function toFeatureFlag(value) {
+            if (typeof value === 'boolean') return value;
+            if (typeof value === 'string') return value.trim().toLowerCase() === 'true';
+            if (typeof value === 'number') return value === 1;
+            return false;
+        }
+
+        function getOrCreateAgentSessionId() {
+            const key = 'mmdbAgentSessionId';
+            let sessionId = sessionStorage.getItem(key);
+            if (!sessionId) {
+                sessionId = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+                    ? crypto.randomUUID()
+                    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                sessionStorage.setItem(key, sessionId);
+            }
+            return sessionId;
+        }
+
+        // DOM Elements
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const aiModeLabel = document.getElementById('aiModeLabel');
+        const resultsSection = document.getElementById('resultsSection');
+        const listViewBtn = document.getElementById('listViewBtn');
+        const tileViewBtn = document.getElementById('tileViewBtn');
+        const modalOverlay = document.getElementById('modalOverlay');
+        const modalClose = document.getElementById('modalClose');
+        const modalContent = document.getElementById('modalContent');
+        const conditionalFields = document.getElementById('conditionalFields');
+        const hybridConditionalFields = document.getElementById('hybridConditionalFields');
+        const aiConditionalFields = document.getElementById('aiConditionalFields');
+        const viewToggle = document.getElementById('viewToggle');
+        const searchTypeRadios = document.querySelectorAll('input[name="searchType"]');
+        const suggestionsList = document.getElementById('suggestionsList');
+        const ftsWeightSlider = document.getElementById('ftsWeightSlider');
+        const ftsWeightField = document.getElementById('ftsWeight');
+        const vectorWeightField = document.getElementById('vectorWeight');
+        const ftsWeightLabel = document.getElementById('ftsWeightLabel');
+        const vectorWeightLabel = document.getElementById('vectorWeightLabel');
+        const hybridApproachSelect = document.getElementById('hybridApproach');
+        const discoverModalOverlay = document.getElementById('discoverModalOverlay');
+        const discoverModalClose = document.getElementById('discoverModalClose');
+        const discoverMessages = document.getElementById('discoverMessages');
+        const discoverInput = document.getElementById('discoverInput');
+        const discoverAskBtn = document.getElementById('discoverAskBtn');
+        const aiModeSelect = document.getElementById('aiMode');
+        const vectorSearchLabel = document.getElementById('vectorSearchLabel');
+        const hybridSearchLabel = document.getElementById('hybridSearchLabel');
+
+        // Event Listeners
+        searchBtn.addEventListener('click', handleSearch);
+        resetBtn.addEventListener('click', handleReset);
+        listViewBtn.addEventListener('click', () => setViewMode('list'));
+        tileViewBtn.addEventListener('click', () => setViewMode('tile'));
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleSearch();
+        });
+
+        searchTypeRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                conditionalFields.style.display = e.target.value === 'exact' ? 'flex' : 'none';
+                hybridConditionalFields.style.display = e.target.value === 'hybrid' ? 'flex' : 'none';
+                aiConditionalFields.style.display = e.target.value === 'ai' ? 'flex' : 'none';
+                viewToggle.style.display = e.target.value === 'ai' ? 'none' : 'flex';
+                searchBtn.textContent = e.target.value === 'ai' ? 'Ask' : 'Search';
+            });
+        });
+
+        ftsWeightSlider.addEventListener('input', syncHybridWeights);
+        syncHybridWeights();
+        configReadyPromise = initializeFrontendConfig();
+
+        // Autocomplete functionality
+        if (suggestionsList) {
+            searchInput.addEventListener('input', async (e) => {
+                const query = e.target.value.trim();
+                const searchType = document.querySelector('input[name="searchType"]:checked').value;
+
+                if (!CONFIG.autocompleteEnabled) {
+                    suggestionsList.classList.remove('active');
+                    return;
+                }
+
+                // Only show suggestions for full text search
+                if (searchType !== 'fulltext' || query.length < 2) {
+                    suggestionsList.classList.remove('active');
+                    return;
+                }
+
+                clearTimeout(suggestionTimeout);
+
+                // Debounce requests (wait 300ms after user stops typing)
+                suggestionTimeout = setTimeout(async () => {
+                    try {
+                        const response = await fetch(`${CONFIG.apiBaseUrl}/api/suggestions`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ query })
+                        });
+
+                        if (!response.ok) throw new Error('Failed to fetch suggestions');
+
+                        const suggestions = await response.json();
+                        displaySuggestions(suggestions);
+                    } catch (error) {
+                        console.error('Suggestions error:', error);
+                        suggestionsList.classList.remove('active');
+                    }
+                }, 300);
+            });
+
+            // Hide suggestions when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.search-row')) {
+                    suggestionsList.classList.remove('active');
+                }
+            });
+        }
+
+        // Display autocomplete suggestions dropdown
+        function displaySuggestions(suggestions) {
+            if (!suggestions || suggestions.length === 0) {
+                suggestionsList.classList.remove('active');
+                return;
+            }
+            
+            suggestionsList.innerHTML = suggestions.map(title => `
+                <div class="suggestion-item" data-title="${escapeHtml(title)}">
+                    ${escapeHtml(title)}
+                </div>
+            `).join('');
+            
+            suggestionsList.classList.add('active');
+            
+            // Click on suggestion to fill search box
+            document.querySelectorAll('.suggestion-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    searchInput.value = item.getAttribute('data-title');
+                    suggestionsList.classList.remove('active');
+                });
+            });
+        }
+
+        modalOverlay.addEventListener('click', (e) => {
+            if (e.target === modalOverlay) closeModal();
+        });
+        modalClose.addEventListener('click', closeModal);
+        discoverModalOverlay.addEventListener('click', (e) => {
+            if (e.target === discoverModalOverlay) closeDiscoverModal();
+        });
+        discoverModalClose.addEventListener('click', closeDiscoverModal);
+        discoverAskBtn.addEventListener('click', handleDiscoverAsk);
+        discoverInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleDiscoverAsk();
+        });
+
+        // Handle Search
+        async function handleSearch() {
+            if (configReadyPromise) {
+                await configReadyPromise;
+            }
+
+            const searchType = document.querySelector('input[name="searchType"]:checked').value;
+            const query = searchInput.value.trim();
+
+            if (!query) {
+                alert('Please enter a search query');
+                return;
+            }
+
+            // Hide suggestions list when search is triggered
+            if (suggestionsList) {
+                suggestionsList.classList.remove('active');
+            }
+
+            currentPage = 1;
+
+            try {
+                resultsSection.innerHTML = '<div class="loading"><span class="spinner"></span>Searching...</div>';
+
+                let endpoint = '';
+                let payload = {};
+
+                if (searchType === 'fulltext') {
+                    endpoint = '/api/search/fulltext';
+                    payload = { query };
+                } else if (searchType === 'vector') {
+                    endpoint = '/api/search/vector';
+                    payload = { query };
+                } else if (searchType === 'hybrid') {
+                    endpoint = '/api/search/hybrid';
+                    payload = {
+                        query,
+                        ftsWeight: parseFloat(ftsWeightField.value),
+                        vectorWeight: parseFloat(vectorWeightField.value),
+                        hybridApproach: hybridApproachSelect.value
+                    };
+                } else if (searchType === 'ai') {
+                    endpoint = '/api/search/chatbot';
+                    payload = {
+                        query,
+                        aiMode: aiModeSelect.value,
+                        sessionId: getOrCreateAgentSessionId()
+                    };
+                } else if (searchType === 'exact') {
+                    const field = document.getElementById('fieldSelect').value;
+                    const sort = document.getElementById('sortSelect').value;
+                    endpoint = '/api/search/exact';
+                    payload = { query, field, sort };
+                }
+
+                const response = await fetch(`${CONFIG.apiBaseUrl}${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) throw new Error(`API error: ${response.status}`);
+
+                if (searchType === 'ai') {
+                    const data = await response.json();
+                    aiChatMessages.push({ role: 'user', text: query });
+                    aiChatMessages.push({
+                        role: 'assistant',
+                        text: typeof data.response === 'string' && data.response.trim().length > 0
+                            ? data.response.trim()
+                            : 'No response received from chatbot.'
+                    });
+                    document.getElementById('facetsSection').style.display = 'none';
+                    displayAIChatMessages();
+                } else {
+                    currentResults = await response.json();
+                    currentPage = 1;
+
+                    // Fetch facets only for fulltext endpoint when facets feature is enabled
+                    if (endpoint === '/api/search/fulltext' && CONFIG.facetsEnabled) {
+                        await fetchFacets(query);
+                    } else {
+                        // Hide facets for exact match and other search types
+                        document.getElementById('facetsSection').style.display = 'none';
+                    }
+
+                    displayResults();
+                }
+            } catch (error) {
+                console.error('Search error:', error);
+                resultsSection.innerHTML = `<div class="empty-state"><p>Error: ${error.message}</p></div>`;
+            }
+        }
+
+        async function initializeFrontendConfig() {
+            try {
+                const response = await fetch(`${CONFIG.apiBaseUrl}/api/config`);
+                if (!response.ok) {
+                    throw new Error(`Config API error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                CONFIG.autocompleteEnabled = toFeatureFlag(data && data.autocompleteEnabled);
+                CONFIG.vectorSearchEnabled = toFeatureFlag(data && data.vectorSearchEnabled);
+                CONFIG.facetsEnabled = toFeatureFlag(data && data.facetsEnabled);
+                CONFIG.ragEnabled = toFeatureFlag(data && data.ragEnabled);
+                CONFIG.agenticEnabled = toFeatureFlag(data && data.agenticEnabled);
+                if (suggestionsList) {
+                    suggestionsList.style.display = CONFIG.autocompleteEnabled ? '' : 'none';
+                }
+                if (vectorSearchLabel) {
+                    vectorSearchLabel.style.display = CONFIG.vectorSearchEnabled ? '' : 'none';
+                }
+                if (hybridSearchLabel) {
+                    hybridSearchLabel.style.display = CONFIG.vectorSearchEnabled ? '' : 'none';
+                }
+                const agenticOption = document.getElementById('agenticOption');
+                if (agenticOption) {
+                    agenticOption.style.display = CONFIG.agenticEnabled ? '' : 'none';
+                }
+            } catch (error) {
+                console.warn('Config load failed. Defaulting ragEnabled to false.', error.message);
+                CONFIG.autocompleteEnabled = false;
+                CONFIG.vectorSearchEnabled = false;
+                CONFIG.facetsEnabled = false;
+                CONFIG.ragEnabled = false;
+                CONFIG.agenticEnabled = false;
+                if (suggestionsList) {
+                    suggestionsList.style.display = 'none';
+                }
+                if (vectorSearchLabel) {
+                    vectorSearchLabel.style.display = 'none';
+                }
+                if (hybridSearchLabel) {
+                    hybridSearchLabel.style.display = 'none';
+                }
+            }
+
+            // Update toolbar button visibility if results are already displayed.
+            if (currentResults.length > 0) {
+                displayResults();
+            }
+
+            aiModeLabel.style.display = CONFIG.ragEnabled ? 'flex' : 'none';
+            if (!CONFIG.vectorSearchEnabled) {
+                const selected = document.querySelector('input[name="searchType"]:checked');
+                if (selected && (selected.value === 'vector' || selected.value === 'hybrid')) {
+                    document.querySelector('input[name="searchType"][value="exact"]').checked = true;
+                    conditionalFields.style.display = 'flex';
+                    hybridConditionalFields.style.display = 'none';
+                    aiConditionalFields.style.display = 'none';
+                    viewToggle.style.display = 'flex';
+                    searchBtn.textContent = 'Search';
+                }
+            }
+            if (!CONFIG.ragEnabled) {
+                const selected = document.querySelector('input[name="searchType"]:checked');
+                if (selected && selected.value === 'ai') {
+                    document.querySelector('input[name="searchType"][value="exact"]').checked = true;
+                    conditionalFields.style.display = 'flex';
+                    aiConditionalFields.style.display = 'none';
+                    viewToggle.style.display = 'flex';
+                    searchBtn.textContent = 'Search';
+                }
+            }
+        }
+
+        function syncHybridWeights() {
+            const ftsWeight = parseFloat(ftsWeightSlider.value);
+            const vectorWeight = 1 - ftsWeight;
+
+            ftsWeightField.value = ftsWeight.toFixed(2);
+            vectorWeightField.value = vectorWeight.toFixed(2);
+            ftsWeightLabel.textContent = `FTS: ${ftsWeight.toFixed(2)}`;
+            vectorWeightLabel.textContent = `Vector: ${vectorWeight.toFixed(2)}`;
+        }
+
+        // Fetch and display facets
+        async function fetchFacets(query) {
+            try {
+                const response = await fetch(`${CONFIG.apiBaseUrl}/api/search/facets`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+
+                if (!response.ok) throw new Error('Failed to fetch facets');
+
+                const facets = await response.json();
+                displayFacets(facets);
+            } catch (error) {
+                console.error('Facets error:', error);
+                document.getElementById('facetsSection').style.display = 'none';
+            }
+        }
+
+        // Display facets
+        function displayFacets(facetsData) {
+            const facetsSection = document.getElementById('facetsSection');
+            
+            // Check if facetsData is empty or invalid
+            if (!facetsData || facetsData.length === 0 || !facetsData[0].facet) {
+                facetsSection.style.display = 'none';
+                return;
+            }
+            facetsSection.style.display = 'block';
+
+            const { facet } = facetsData[0];
+            
+            // Display Genres
+            const genresFacet = document.getElementById('genresFacet');
+            if (facet.genres && facet.genres.buckets && facet.genres.buckets.length > 0) {
+                genresFacet.innerHTML = facet.genres.buckets.map(bucket => 
+                    `<div class="facet-item">${escapeHtml(bucket._id)} (${bucket.count.$numberLong || bucket.count})</div>`
+                ).join('');
+            } else {
+                genresFacet.innerHTML = '<div class="facet-empty">No data</div>';
+            }
+
+            // Display Ratings
+            const ratingsFacet = document.getElementById('ratingsFacet');
+            if (facet.ratings && facet.ratings.buckets && facet.ratings.buckets.length > 0) {
+                const buckets = facet.ratings.buckets;
+                ratingsFacet.innerHTML = buckets.map((bucket, index) => {
+                    let label;
+                    const count = bucket.count.$numberLong || bucket.count;
+                    
+                    // Check if this is the last bucket
+                    if (index === buckets.length - 1) {
+                        // Last bucket: check if it's a string
+                        if (typeof bucket._id === 'string') {
+                            label = bucket._id;
+                        } else {
+                            label = `${bucket._id}+`;
+                        }
+                    } else {
+                        // Not the last bucket
+                        const nextBucket = buckets[index + 1];
+                        // Check if next bucket is a string (meaning this is second to last)
+                        if (typeof nextBucket._id === 'string') {
+                            label = `${bucket._id}+`;
+                        } else {
+                            label = `${bucket._id} - ${nextBucket._id}`;
+                        }
+                    }
+                    
+                    return `<div class="facet-item">${label} (${count})</div>`;
+                }).join('');
+            } else {
+                ratingsFacet.innerHTML = '<div class="facet-empty">No data</div>';
+            }
+
+            // Display Release Dates
+            const releaseDatesFacet = document.getElementById('releaseDatesFacet');
+            if (facet.release_dates && facet.release_dates.buckets && facet.release_dates.buckets.length > 0) {
+                const buckets = facet.release_dates.buckets;
+                releaseDatesFacet.innerHTML = buckets.map((bucket, index) => {
+                    let label;
+                    const count = bucket.count.$numberLong || bucket.count;
+                    
+                    // Helper function to format date as YYYY-MM-DD
+                    const formatDate = (dateValue) => {
+                        // If it's already a string in YYYY-MM-DD format, return as-is
+                        if (typeof dateValue === 'string') return dateValue;
+                        // Otherwise handle MongoDB extended JSON format
+                        const date = new Date(dateValue.$date || dateValue);
+                        return date.toISOString().split('T')[0];
+                    };
+                    
+                    // Helper function to check if a bucket is a date string (starts with 4 numeric characters)
+                    const isDateBucket = (bucketId) => {
+                        if (!bucketId || typeof bucketId !== 'string') return false;
+                        return /^\d{4}/.test(bucketId);
+                    };
+                    
+                    // If bucket._id is a string (not a date object), just display it as-is
+                    if (!isDateBucket(bucket._id)) {
+                        label = bucket._id;
+                    } else {
+                        // Current bucket is a date
+                        const nextBucket = buckets[index + 1];
+                        
+                        // Check if there's a next bucket AND it's also a date
+                        if (nextBucket && isDateBucket(nextBucket._id)) {
+                            // Show range from current to next
+                            label = bucket._id.split("T")[0]+" to "+nextBucket._id.split("T")[0];
+                        } else {
+                            // Either last bucket or next bucket is a string
+                            label = bucket._id.split("T")[0]+" and later";
+                        }
+                    }
+                    
+                    return `<div class="facet-item">${label} (${count})</div>`;
+                }).join('');
+            } else {
+                releaseDatesFacet.innerHTML = '<div class="facet-empty">No data</div>';
+            }
+
+            facetsSection.style.display = 'block';
+        }
+
+        // Display Results
+        function displayResults() {
+            if (currentResults.length === 0) {
+                resultsSection.innerHTML = '<div class="empty-state"><p>No results found</p></div>';
+                return;
+            }
+
+            const start = (currentPage - 1) * resultsPerPage;
+            const end = start + resultsPerPage;
+            const pageResults = currentResults.slice(start, end);
+
+            let html = '<div class="results-toolbar">';
+            html += `<div class="results-info">Found ${currentResults.length} result(s)</div>`;
+            if (CONFIG.ragEnabled) {
+                html += '<button class="btn btn-primary discover-btn" id="discoverBtn">Discover Results</button>';
+            }
+            html += '</div>';
+
+            if (isListView) {
+                html += '<div class="results-list">';
+                pageResults.forEach(movie => {
+                    html += createListItemHTML(movie);
+                });
+                html += '</div>';
+            } else {
+                html += '<div class="results-grid">';
+                pageResults.forEach(movie => {
+                    html += createTileItemHTML(movie);
+                });
+                html += '</div>';
+            }
+
+            // Add Pagination
+            const totalPages = Math.ceil(currentResults.length / resultsPerPage);
+            if (totalPages > 1) {
+                html += createPaginationHTML(totalPages);
+            }
+
+            resultsSection.innerHTML = html;
+
+            // Attach event listeners to result items
+            document.querySelectorAll('[data-movie-id]').forEach(item => {
+                item.addEventListener('click', () => {
+                    const movieId = item.getAttribute('data-movie-id');
+                    const movie = currentResults.find(m => m._id === movieId);
+                    if (movie) openModal(movie);
+                });
+            });
+
+            const discoverBtn = document.getElementById('discoverBtn');
+            if (discoverBtn) {
+                discoverBtn.addEventListener('click', openDiscoverModal);
+            }
+
+            // Attach pagination listeners
+            document.querySelectorAll('.pagination button').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    currentPage = parseInt(e.target.getAttribute('data-page'));
+                    displayResults();
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                });
+            });
+        }
+
+        // Create List Item HTML
+        function createListItemHTML(movie) {
+            const cast = movie.cast ? movie.cast.slice(0, 4).join(', ') : 'N/A';
+            const poster = movie.poster || 'N/A';
+            const plot = movie.plot || movie.fullplot || 'No plot information available';
+            const score = movie.score ? movie.score.toFixed(5) : null;
+
+            return `
+                <div class="result-item-list" data-movie-id="${movie._id}">
+                    ${poster !== 'N/A' ? `<img src="${poster}" alt="${movie.title}" class="result-poster-list" onerror="this.src='movie-reel.webp'">` : `<img src="movie-reel.webp" alt="${movie.title}" class="result-poster-list">`}
+                    <div class="result-content">
+                        <div class="result-title">${escapeHtml(movie.title)}${score ? ` <span style="color: #999; font-size: 14px; font-weight: normal;">(Score: ${score})</span>` : ''}</div>
+                        <div class="result-year">${movie.year || 'N/A'}</div>
+                        <div class="result-cast"><strong>Cast:</strong> ${escapeHtml(cast)}</div>
+                        <div class="result-plot">${escapeHtml(plot)}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Create Tile Item HTML
+        function createTileItemHTML(movie) {
+            const poster = movie.poster || 'N/A';
+            const score = movie.score ? movie.score.toFixed(5) : null;
+
+            return `
+                <div class="result-item-tile" data-movie-id="${movie._id}">
+                    ${poster !== 'N/A' ? `<img src="${poster}" alt="${movie.title}" class="result-poster-tile" onerror="this.src='movie-reel.webp'">` : `<img src="movie-reel.webp" alt="${movie.title}" class="result-poster-tile">`}
+                    <div class="result-info">
+                        <div class="result-title">${escapeHtml(movie.title)}</div>
+                        <div class="result-year">${movie.year || 'N/A'}${score ? ` • Score: ${score}` : ''}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Create Pagination HTML
+        function createPaginationHTML(totalPages) {
+            let html = '<div class="pagination">';
+
+            if (currentPage > 1) {
+                html += `<button data-page="1">« First</button>`;
+                html += `<button data-page="${currentPage - 1}">‹ Previous</button>`;
+            }
+
+            for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
+                if (i === currentPage) {
+                    html += `<span class="active">${i}</span>`;
+                } else {
+                    html += `<button data-page="${i}">${i}</button>`;
+                }
+            }
+
+            if (currentPage < totalPages) {
+                html += `<button data-page="${currentPage + 1}">Next ›</button>`;
+                html += `<button data-page="${totalPages}">Last »</button>`;
+            }
+
+            html += '</div>';
+            return html;
+        }
+
+        // Open Modal
+        function openModal(movie) {
+            const cast = movie.cast ? movie.cast.join(', ') : 'N/A';
+            const directors = movie.directors ? movie.directors.join(', ') : 'N/A';
+            const countries = movie.countries ? movie.countries.join(', ') : 'N/A';
+            const languages = movie.languages ? movie.languages.join(', ') : 'N/A';
+            const imdbRating = movie.imdb ? movie.imdb.rating : 'N/A';
+            const imdbVotes = movie.imdb ? movie.imdb.votes : 'N/A';
+            const rated = movie.rated || 'N/A';
+            const poster = movie.poster || 'N/A';
+
+            // Build plot HTML with highlights if available
+            let plotHtml = '';
+            if (movie.highlights && movie.highlights.length > 0) {
+                // Find highlights for fullplot
+                const fullplotHighlights = movie.highlights.filter(h => h.path === 'fullplot');
+                if (fullplotHighlights.length > 0) {
+                    // Combine all text segments with highlighting
+                    plotHtml = fullplotHighlights.map(highlight => {
+                        return highlight.texts.map(segment => {
+                            if (segment.type === 'hit') {
+                                return `<span style="background-color: yellow; font-weight: bold;">${escapeHtml(segment.value)}</span>`;
+                            } else {
+                                return escapeHtml(segment.value);
+                            }
+                        }).join('');
+                    }).join(' ');
+                } else if (movie.fullplot) {
+                    plotHtml = escapeHtml(movie.fullplot);
+                }
+            } else if (movie.fullplot) {
+                plotHtml = escapeHtml(movie.fullplot);
+            }
+
+            const html = `
+                ${poster !== 'N/A' ? `<img src="${poster}" alt="${movie.title}" class="modal-poster" onerror="this.style.display='none'">` : ''}
+                <div class="modal-details">
+                    <div class="modal-title">${escapeHtml(movie.title)}</div>
+                    
+                    <div class="modal-meta">
+                        <div class="modal-meta-item">
+                            <span class="modal-meta-label">Year</span>
+                            <span>${movie.year || 'N/A'}</span>
+                        </div>
+                        <div class="modal-meta-item">
+                            <span class="modal-meta-label">Rated</span>
+                            <span>${escapeHtml(rated)}</span>
+                        </div>
+                        <div class="modal-meta-item">
+                            <span class="modal-meta-label">Runtime</span>
+                            <span>${movie.runtime ? movie.runtime + ' min' : 'N/A'}</span>
+                        </div>
+                        <div class="modal-meta-item">
+                            <span class="modal-meta-label">IMDb Rating</span>
+                            <span>${imdbRating}${imdbVotes !== 'N/A' ? ` (${imdbVotes.toLocaleString()} votes)` : ''}</span>
+                        </div>
+                    </div>
+
+                    ${plotHtml ? `
+                    <div class="modal-section">
+                        <div class="modal-section-title">Plot</div>
+                        <div class="modal-section-content">${plotHtml}</div>
+                    </div>
+                    ` : ''}
+
+                    ${movie.genres ? `
+                    <div class="modal-section">
+                        <div class="modal-section-title">Genres</div>
+                        <div class="modal-section-content">${escapeHtml(movie.genres.join(', '))}</div>
+                    </div>
+                    ` : ''}
+
+                    <div class="modal-section">
+                        <div class="modal-section-title">Cast</div>
+                        <div class="modal-section-content">${escapeHtml(cast)}</div>
+                    </div>
+
+                    <div class="modal-section">
+                        <div class="modal-section-title">Directors</div>
+                        <div class="modal-section-content">${escapeHtml(directors)}</div>
+                    </div>
+
+                    <div class="modal-section">
+                        <div class="modal-section-title">Countries</div>
+                        <div class="modal-section-content">${escapeHtml(countries)}</div>
+                    </div>
+
+                    <div class="modal-section">
+                        <div class="modal-section-title">Languages</div>
+                        <div class="modal-section-content">${escapeHtml(languages)}</div>
+                    </div>
+
+                    ${movie.awards ? `
+                    <div class="modal-section">
+                        <div class="modal-section-title">Awards</div>
+                        <div class="modal-section-content">${escapeHtml(movie.awards.text)}</div>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+
+            modalContent.innerHTML = html;
+            modalOverlay.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        // Close Modal
+        function closeModal() {
+            modalOverlay.classList.remove('active');
+            document.body.style.overflow = 'auto';
+        }
+
+        // Set View Mode
+        function setViewMode(mode) {
+            isListView = mode === 'list';
+            listViewBtn.classList.toggle('active', isListView);
+            tileViewBtn.classList.toggle('active', !isListView);
+            
+            if (currentResults.length > 0) {
+                displayResults();
+                window.scrollTo({ top: 300, behavior: 'smooth' });
+            }
+        }
+
+        // Reset Search
+        function handleReset() {
+            searchInput.value = '';
+            currentResults = [];
+            currentPage = 1;
+            discoverMessagesState = [];
+            aiChatMessages = [];
+            resultsSection.innerHTML = '<div class="empty-state"><p>Enter a search query to get started</p></div>';
+            document.getElementById('facetsSection').style.display = 'none';
+            const selectedSearchType = document.querySelector('input[name="searchType"]:checked')?.value;
+            searchBtn.textContent = selectedSearchType === 'ai' ? 'Ask' : 'Search';
+        }
+
+        function displayAIChatMessages() {
+            let html = '<div class="ai-chat-container">';
+            html += '<div class="ai-chat-messages">';
+            html += aiChatMessages.map(message => {
+                const waitingClass = message.waiting ? ' waiting' : '';
+                const roleClass = message.role === 'user' ? ' user' : ' assistant';
+                return `<div class="ai-chat-message${roleClass}${waitingClass}">${escapeHtml(message.text)}</div>`;
+            }).join('');
+            html += '</div></div>';
+
+            resultsSection.innerHTML = html;
+
+            const aiChatMessagesDiv = document.querySelector('.ai-chat-messages');
+            aiChatMessagesDiv.scrollTop = aiChatMessagesDiv.scrollHeight;
+            searchInput.focus();
+        }
+
+        async function handleAIChatAsk() {
+            const query = searchInput.value.trim();
+            if (!query) {
+                return;
+            }
+
+            aiChatMessages.push({ role: 'user', text: query });
+            const waitingIndex = aiChatMessages.push({ role: 'assistant', text: 'Waiting...', waiting: true }) - 1;
+            searchInput.value = '';
+            displayAIChatMessages();
+
+            try {
+                const response = await fetch(`${CONFIG.apiBaseUrl}/api/search/chatbot`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query,
+                        aiMode: aiModeSelect.value,
+                        sessionId: getOrCreateAgentSessionId()
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Chatbot API error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const answer = typeof data.response === 'string' && data.response.trim().length > 0
+                    ? data.response.trim()
+                    : 'No response received from chatbot.';
+
+                aiChatMessages[waitingIndex] = { role: 'assistant', text: answer };
+            } catch (error) {
+                console.error('AI Chat error:', error);
+                aiChatMessages[waitingIndex] = {
+                    role: 'assistant',
+                    text: `I could not complete that request. ${error.message}`
+                };
+            }
+
+            displayAIChatMessages();
+        }
+
+        function openDiscoverModal() {
+            if (!Array.isArray(currentResults) || currentResults.length === 0) {
+                alert('Run a search before using Discover Results.');
+                return;
+            }
+
+            if (discoverMessagesState.length === 0) {
+                discoverMessagesState.push({
+                    role: 'assistant',
+                    text: 'Ask anything about the current results. I will answer using the retrieved movies.'
+                });
+            }
+
+            renderDiscoverMessages();
+            discoverModalOverlay.classList.add('active');
+            document.body.classList.add('modal-open');
+            discoverInput.focus();
+        }
+
+        function closeDiscoverModal() {
+            discoverModalOverlay.classList.remove('active');
+            document.body.classList.remove('modal-open');
+        }
+
+        function renderDiscoverMessages() {
+            if (!discoverMessagesState.length) {
+                discoverMessages.innerHTML = '';
+                return;
+            }
+
+            discoverMessages.innerHTML = discoverMessagesState.map(message => {
+                const waitingClass = message.waiting ? ' waiting' : '';
+                const roleClass = message.role === 'user' ? ' user' : ' assistant';
+                return `<div class="chat-message${roleClass}${waitingClass}">${escapeHtml(message.text)}</div>`;
+            }).join('');
+
+            discoverMessages.scrollTop = discoverMessages.scrollHeight;
+        }
+
+        async function handleDiscoverAsk() {
+            const query = discoverInput.value.trim();
+            if (!query) {
+                return;
+            }
+
+            discoverMessagesState.push({ role: 'user', text: query });
+            const waitingIndex = discoverMessagesState.push({ role: 'assistant', text: 'Waiting...', waiting: true }) - 1;
+            discoverInput.value = '';
+            renderDiscoverMessages();
+
+            try {
+                const response = await fetch(`${CONFIG.apiBaseUrl}/discover`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query, context: currentResults })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Discover API error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const answer = typeof data.response === 'string' && data.response.trim().length > 0
+                    ? data.response.trim()
+                    : 'No response received from chatbot.';
+
+                discoverMessagesState[waitingIndex] = { role: 'assistant', text: answer };
+            } catch (error) {
+                console.error('Discover API error:', error);
+                discoverMessagesState[waitingIndex] = {
+                    role: 'assistant',
+                    text: `I could not complete that request. ${error.message}`
+                };
+            }
+
+            renderDiscoverMessages();
+        }
+
+        // Utility: Escape HTML
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

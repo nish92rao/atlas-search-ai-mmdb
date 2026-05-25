@@ -1,0 +1,6 @@
+{
+  "watch": ["utils.js", "app.js", "server.js", ".env"],
+  "ext": "js,env",
+  "delay": 1000
+}
+
